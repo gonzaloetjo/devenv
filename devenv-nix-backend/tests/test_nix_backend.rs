@@ -195,6 +195,7 @@ fn setup_isolated_test_env(
         cachix_manager,
         shutdown,
         None,
+        None,
     )
     .expect("Failed to create NixRustBackend");
 
@@ -485,11 +486,7 @@ async fn test_backend_dev_env() {
 
     let output = result.unwrap();
     assert!(
-        output.status.success(),
-        "dev_env should have success status"
-    );
-    assert!(
-        !output.stdout.is_empty(),
+        !output.bash_env.is_empty(),
         "dev_env should return environment"
     );
 }
@@ -591,39 +588,13 @@ async fn test_backend_search_simple() {
         result.err()
     );
 
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-    assert!(!output.stdout.is_empty(), "search() should return results");
+    let results = result.unwrap();
+    assert!(!results.is_empty(), "search() should return results");
 
-    // Parse the JSON results
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an object with attribute paths as keys
-    assert!(
-        results.is_object(),
-        "Search results should be a JSON object"
-    );
-
-    // There should be at least one result for "hello"
-    if !results.as_object().unwrap().is_empty() {
-        let first_result = &results.as_object().unwrap().values().next().unwrap();
-        assert!(
-            first_result.get("pname").is_some(),
-            "Result should have pname"
-        );
-        assert!(
-            first_result.get("version").is_some(),
-            "Result should have version"
-        );
-        assert!(
-            first_result.get("description").is_some(),
-            "Result should have description"
-        );
+    // Verify we got valid results with expected fields
+    if let Some((attr_path, pkg)) = results.iter().next() {
+        assert!(!attr_path.is_empty(), "Attribute path should not be empty");
+        assert!(!pkg.pname.is_empty(), "pname should not be empty");
     }
 }
 
@@ -646,28 +617,19 @@ async fn test_backend_search_case_insensitive() {
         .await
         .expect("Failed to assemble");
 
-    // Search with different cases
-    let output1 = backend
+    // Search with different cases - all should succeed
+    let _results1 = backend
         .search("HELLO", None)
         .await
         .expect("Uppercase search should succeed");
-    let output2 = backend
+    let _results2 = backend
         .search("Hello", None)
         .await
         .expect("Mixed case search should succeed");
-    let output3 = backend
+    let _results3 = backend
         .search("hello", None)
         .await
         .expect("Lowercase search should succeed");
-
-    // All should return valid JSON
-    let json1 = String::from_utf8_lossy(&output1.stdout);
-    let json2 = String::from_utf8_lossy(&output2.stdout);
-    let json3 = String::from_utf8_lossy(&output3.stdout);
-
-    serde_json::from_str::<serde_json::Value>(&json1).expect("Result 1 should be valid JSON");
-    serde_json::from_str::<serde_json::Value>(&json2).expect("Result 2 should be valid JSON");
-    serde_json::from_str::<serde_json::Value>(&json3).expect("Result 3 should be valid JSON");
 }
 
 #[nix_test]
@@ -696,15 +658,6 @@ async fn test_backend_search_regex_special_chars() {
         "Search with dots should succeed (should be escaped): {:?}",
         result.err()
     );
-
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str::<serde_json::Value>(&json_str).expect("Results should be valid JSON");
 }
 
 #[nix_test]
@@ -733,20 +686,9 @@ async fn test_backend_search_empty_results() {
         "search() should succeed even with no results"
     );
 
-    let output = result.unwrap();
+    let results = result.unwrap();
     assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an empty object
-    assert!(results.is_object(), "Results should be a JSON object");
-    assert!(
-        results.as_object().unwrap().is_empty(),
+        results.is_empty(),
         "Results should be empty for non-matching query"
     );
 }
@@ -989,6 +931,7 @@ async fn test_eval_nonexistent_attribute() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
     backend
@@ -1212,6 +1155,7 @@ async fn test_backend_creation_with_offline_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify backend was created with offline mode
@@ -1235,6 +1179,7 @@ async fn test_backend_with_system_override() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     );
 
@@ -1260,6 +1205,7 @@ async fn test_backend_with_impure_mode() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify impure mode is enabled
@@ -1284,6 +1230,7 @@ async fn test_backend_with_custom_nix_options() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     );
 
     // TODO: Verify custom nix options are applied
@@ -1307,6 +1254,7 @@ async fn test_backend_with_nix_debugger_enabled() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     );
 
@@ -1333,6 +1281,7 @@ async fn test_update_with_invalid_override_input() {
         global_options,
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1377,6 +1326,7 @@ async fn test_eval_empty_attributes_array() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1462,6 +1412,7 @@ async fn test_dev_env_bash_output_format() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
     backend
@@ -1494,6 +1445,7 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1528,6 +1480,7 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1622,6 +1575,7 @@ async fn test_update_lock_file_already_exists() {
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -1997,34 +1951,8 @@ async fn test_search_matches_description_field() {
         result.err()
     );
 
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    // Parse the JSON results
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an object
-    assert!(
-        results.is_object(),
-        "Search results should be a JSON object"
-    );
-
-    // If results exist, verify they have the expected fields
-    if !results.as_object().unwrap().is_empty() {
-        for (_key, value) in results.as_object().unwrap().iter() {
-            assert!(value.get("pname").is_some(), "Result should have pname");
-            assert!(value.get("version").is_some(), "Result should have version");
-            assert!(
-                value.get("description").is_some(),
-                "Result should have description field"
-            );
-        }
-    }
+    // Results are returned directly as SearchResults
+    let _results = result.unwrap();
 }
 
 /// Test search with very long query
@@ -2047,7 +1975,7 @@ async fn test_search_with_very_long_query() {
         .await
         .expect("Failed to assemble");
 
-    // Test with very long query string - should not crash and return valid JSON
+    // Test with very long query string - should not crash
     let long_query = "a".repeat(1000);
     let result = backend.search(&long_query, None).await;
     assert!(
@@ -2055,27 +1983,6 @@ async fn test_search_with_very_long_query() {
         "search() should handle long queries: {:?}",
         result.err()
     );
-
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    // Parse the JSON results - should be valid even if empty
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an object
-    assert!(
-        results.is_object(),
-        "Search results should be a JSON object"
-    );
-
-    // It's OK if results are empty (the query is unlikely to match anything)
-    // Just verify no crash and valid output
-    assert!(!json_str.is_empty(), "Output should not be empty");
 }
 
 /// Test search with unicode characters
@@ -2105,26 +2012,6 @@ async fn test_search_with_unicode_characters() {
         "search() should handle unicode queries: {:?}",
         result.err()
     );
-
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    // Parse the JSON results
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an object
-    assert!(
-        results.is_object(),
-        "Search results should be a JSON object"
-    );
-
-    // Verify output is valid UTF-8
-    assert!(!json_str.is_empty(), "Output should not be empty");
 }
 
 /// Test search depth limitation
@@ -2155,28 +2042,8 @@ async fn test_search_depth_limitation() {
         result.err()
     );
 
-    let output = result.unwrap();
-    assert!(
-        output.status.success(),
-        "search() should have success status"
-    );
-
-    // Parse the JSON results
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let results: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Results should be valid JSON");
-
-    // Should be an object
-    assert!(
-        results.is_object(),
-        "Search results should be a JSON object"
-    );
-
     // The depth limitation is tested implicitly - if the search completes quickly
-    // without timing out, the depth limitation is working. The search function
-    // uses a max_depth of 5 to prevent infinite recursion in the nixpkgs attribute set.
-    // We verify that it returns results without crashing due to excessive recursion.
-    assert!(!json_str.is_empty(), "Search should return valid output");
+    // without timing out, the depth limitation is working.
 }
 
 // ============================================================================
@@ -2643,6 +2510,7 @@ async fn test_backend_reuse_across_operations() {
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
         None,
+        None,
     )
     .expect("Failed to create backend");
 
@@ -2685,6 +2553,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -2766,6 +2635,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), None),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
@@ -2893,6 +2763,7 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
             GlobalOptions::default(),
             cachix_manager,
             Shutdown::new(),
+            None,
             None,
         )
         .expect("Failed to create backend"),
@@ -3071,6 +2942,7 @@ inputs:
         GlobalOptions::default(),
         create_test_cachix_manager(&get_repo_root(), Some(mock.socket_path().to_path_buf())),
         Shutdown::new(),
+        None,
         None,
     )
     .expect("Failed to create backend");
