@@ -55,6 +55,14 @@ let
             # to avoid fetchTree hashing the entire project directory
             else if node.locked.type or null == "path" && node.locked.path or null == "." then
               rootSrc
+            # Absolute path inputs: skip fetchTree/NAR hash validation since they're mutable
+            # Access the path directly without hash checking
+            else if node.locked.type or null == "path" && builtins.substring 0 1 (node.locked.path or "") == "/" then
+              {
+                lastModified = node.locked.lastModified or 0;
+                lastModifiedDate = formatSecondsSinceEpoch (node.locked.lastModified or 0);
+                outPath = /. + node.locked.path;
+              }
             else
               let
                 locked = node.locked;

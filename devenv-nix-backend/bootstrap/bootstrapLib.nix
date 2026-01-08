@@ -142,6 +142,7 @@ rec {
     , secretspec ? null
     , devenv_config ? { }
     , nixpkgs_config ? { }
+    , primops ? { }
     }:
     let
       inherit (inputs) nixpkgs;
@@ -276,7 +277,7 @@ rec {
       # Phase 1: Base evaluation to extract profile definitions
       baseProject = lib.evalModules {
         specialArgs = inputs // {
-          inherit inputs secretspec;
+          inherit inputs secretspec primops;
         };
         modules = mkCommonModules pkgsBootstrap;
       };
@@ -533,7 +534,7 @@ rec {
           evalPkgs = mkPkgsForSystem evalSystem;
           evalProject = lib.evalModules {
             specialArgs = inputs // {
-              inherit inputs secretspec;
+              inherit inputs secretspec primops;
             };
             modules = mkCommonModules evalPkgs;
           };
